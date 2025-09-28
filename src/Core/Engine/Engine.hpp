@@ -5,6 +5,8 @@
 #ifndef SW_BATTLE_TEST_ENGINE_HPP
 #define SW_BATTLE_TEST_ENGINE_HPP
 
+#include "IO/Commands/SpawnHealer.hpp"
+#include "IO/Commands/SpawnMine.hpp"
 #include "IO/Events/UnitSpawned.hpp"
 #include "MapUnitsController.hpp"
 
@@ -40,6 +42,8 @@ namespace sw::core
         void handleCommand(const sw::io::CreateMap& cmd);
         void handleCommand(const sw::io::SpawnSwordsman& cmd);
         void handleCommand(const sw::io::SpawnHunter& cmd);
+        void handleCommand(const sw::io::SpawnMine& cmd);
+        void handleCommand(const sw::io::SpawnHealer& cmd);
         void handleCommand(const sw::io::March& cmd);
 
     	void simulateRounds();

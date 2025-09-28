@@ -1,6 +1,10 @@
+#include "IO/Commands/SpawnHealer.hpp"
+
+#include <Core/Engine/Engine.hpp>
 #include <IO/Commands/CreateMap.hpp>
 #include <IO/Commands/March.hpp>
 #include <IO/Commands/SpawnHunter.hpp>
+#include <IO/Commands/SpawnMine.hpp>
 #include <IO/Commands/SpawnSwordsman.hpp>
 #include <IO/Events/MapCreated.hpp>
 #include <IO/Events/MarchEnded.hpp>
@@ -12,7 +16,6 @@
 #include <IO/System/CommandParser.hpp>
 #include <IO/System/EventLog.hpp>
 #include <IO/System/PrintDebug.hpp>
-#include <Core/Engine/Engine.hpp>
 #include <fstream>
 #include <iostream>
 
@@ -42,6 +45,8 @@ int main(int argc, char** argv)
     parser.add<io::CreateMap>([&engine](auto command) { engine.handleCommand(command); })
         .add<io::SpawnSwordsman>([&engine](auto command) { engine.handleCommand(command); })
         .add<io::SpawnHunter>([&engine](auto command) { engine.handleCommand(command); })
+		.add<io::SpawnMine>([&engine](auto command) { engine.handleCommand(command); })
+		.add<io::SpawnHealer>([&engine](auto command) { engine.handleCommand(command); })
         .add<io::March>([&engine](auto command) { engine.handleCommand(command); });
 
     parser.parse(file);

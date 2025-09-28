@@ -5,6 +5,7 @@
 #include "MapUnitsController.hpp"
 
 #include "Action.hpp"
+#include "Core/Units/MovingUnit.hpp"
 #include "IO/Events/MarchEnded.hpp"
 #include "IO/Events/MarchStarted.hpp"
 #include "IO/Events/UnitAttacked.hpp"
@@ -140,234 +141,80 @@ namespace sw::core
 		// loop thru units and let them act
 		for (auto& [id, unit] : units)
 		{
+			// check for units that were killed during this round and not yet removed
 			if (!unit->isAlive())
 			{
 				continue; // skip dead units
 			}
 			while (unit->getAvailableActionsPerTurn() > 0)
 			{
-				for (auto& actionType: unit->getActionTypes())
+				if (unit->tryToExecuteNextAction(*this))
 				{
-					auto action = decideActionForUnit(unit, actionType);
-					if (action.has_value())
-					{
-						executeAction(action.value());
-						unit->consumeAction();
-						result++;
-						// break to re-evaluate available actions from the start
-						break;
-					}
-				}
-				// if no action was performed, break the loop to avoid infinite loop
-				// without this, we need to add WaitAction to every unit
-				if (unit->getAvailableActionsPerTurn() > 0)
-				{
-					unit->consumeAction();
+					result++;
 				}
 			}
 		}
 		return result;
 	}
-
-	// returns possible action for the unit and action type,
-	// or std::nullopt if no action is possible
-	std::optional<Action> MapUnitsController::decideActionForUnit(
-		const std::shared_ptr<Unit>& unit, const ActionType& actionType)
-	{
-		std::optional<Action> action{};
-		if (!unit->getAvailableActionsPerTurn())
-		{
-			return action;
-		}
-		switch (actionType)
-		{
-			case MeleeAttackActionType:
-			case RangedAttackActionType:
-				action = decideAttackActionForUnit(actionType,unit);
-				break;
-			case WaitActionType:
-				action = WaitAction(unit);
-				break;
-			case MoveActionType:
-				{
-					auto movingUnit = std::dynamic_pointer_cast<MovingUnit>(unit);
-					assert(movingUnit && "MapUnitsController::decideActionForUnit: called MoveActionType on not MovingUnit");
-					action = decideMoveActionForUnit(movingUnit);
-				}
-				break;
-			default:
-				break;
-		}
-		return action;
-	}
-
-	const void MapUnitsController::executeAction(const Action& action)
-	{
-		// handle move action for now
-		switch (action.actionType)
-		{
-			case MoveActionType:
-				executeMoveAction(action);
-				break;
-			case MeleeAttackActionType:
-			case RangedAttackActionType:
-			case ExplodeAttackActionType:
-				executeAttackAction(action);
-			default:
-				break;
-		}
-	}
-
-	const void MapUnitsController::executeMoveAction(const Action& action)
-	{
-		auto unitPtr = action.unitFrom.lock();
-		if (!unitPtr)
-		{
-			throw std::runtime_error("MoveAction is missing unitFrom");
-		}
-		// cast to MovingUnit
-		auto movingUnitPtr = std::dynamic_pointer_cast<MovingUnit>(unitPtr);
-		if (!movingUnitPtr)
-		{
-			throw std::runtime_error("MoveAction can not be applied to non MovingUnit");
-		}
-		if (!action.coordinateTo.has_value())
-		{
-			throw std::runtime_error("MoveAction missing coordinateTo");
-		}
-		// perform move
-		auto newPos = action.coordinateTo.value();
-		unitPtr->setPosition(newPos);
-		// emit UnitMoved event using injected EventLog and current tick callback
-		eventLog_.log(getCurrentTick_(), sw::io::UnitMoved{unitPtr->getId(), static_cast<uint32_t>(newPos.getX()), static_cast<uint32_t>(newPos.getY())});
-		if (movingUnitPtr->getTarget() == newPos)
-		{
-			eventLog_.log(getCurrentTick_(), sw::io::MarchEnded(unitPtr->getId(), static_cast<uint32_t>(newPos.getX()), static_cast<uint32_t>(newPos.getY())));
-			// reached target
-			movingUnitPtr->clearTarget();
-		}
-	}
-
-	// this combines logic for both Melee and Ranged attacks
-	const std::optional<Action> MapUnitsController::decideAttackActionForUnit(const ActionType& actionType, const std::shared_ptr<Unit>& unit)
-	{
-		uint32_t range_max = actionType == MeleeAttackActionType ? MAX_MELEE_ATTACK_RANGE : unit->getRange(); // melee range is 1, ranged is 3 for now
-		if (range_max == 0)
-		{
-			// unit can not attack
-			return std::nullopt;
-		}
-		// Rule for HunterUnit and maybe other
-		if (actionType == RangedAttackActionType && unit->disallowRangedIfAdjacent())
-		{
-			auto adjacentUnits = getUnitsInRange(unit->getPosition(), MAX_MELEE_ATTACK_RANGE, 1);
-			// erase non-moving AdjacentUnits
-			std::erase_if(adjacentUnits, [](const auto& u) { return !std::dynamic_pointer_cast<MovingUnit>(u); });
-			if (!adjacentUnits.empty()) // adjacent units present, disallow ranged attack
-			{
-				return std::nullopt;
-			}
-		}
-		uint32_t range_min = actionType == MeleeAttackActionType ? MAX_MELEE_ATTACK_RANGE : MIN_RANGED_ATTACK_RANGE; // melee min range is 1, ranged min range is 2 for now
-		auto unitsInRange = getUnitsInRange(unit->getPosition(), range_max, range_min);
-		std::vector< std::shared_ptr<Unit> > attackableUnits;
-		attackableUnits.reserve(unitsInRange.size());
-		for (const auto& targetUnit : unitsInRange)
-		{
-			if (targetUnit->canTakeDamage())
-			{
-				attackableUnits.emplace_back(targetUnit);
-			}
-		}
-		if (attackableUnits.empty())
-		{
-			return std::nullopt;
-		}
-		// pick random target
-		auto targetUnit = attackableUnits[ Util::randomInRange(static_cast<uint32_t>(attackableUnits.size()) - 1, 0) ];
-		// construct AttackAction using shared_ptr so Action will keep a weak_ptr
-
-		switch (actionType)
-		{
-			case MeleeAttackActionType:
-				return MeleeAttackAction(unit, targetUnit);
-			case RangedAttackActionType:
-				return	RangedAttackAction(unit, targetUnit);
-			default:
-				assert("Called on unsupported ActionType" && false);
-				break;
-		}
-		return std::nullopt;
-	}
-
-	const void MapUnitsController::executeAttackAction(const Action& action)
-	{
-		auto unitPtr = action.unitFrom.lock();
-		if (!unitPtr)
-		{
-			throw std::runtime_error("MeleeAttackAction is missing unitFrom");
-		}
-		if (action.unitsTo.empty())
-		{
-			throw std::runtime_error("MeleeAttackAction is missing unitsTo");
-		}
-		auto targetUnitPtr = action.unitsTo[0].lock();
-		if (!targetUnitPtr)
-		{
-			throw std::runtime_error("MeleeAttackAction target unit is expired");
-		}
-		if (!targetUnitPtr->hasHp())
-		{
-			throw std::runtime_error("MeleeAttackAction target unit can not take damage or is dead");
-		}
-		// perform attack
-		uint32_t damage = unitPtr->getDamageForActionType(action.actionType);
-		targetUnitPtr->setHp(targetUnitPtr->getHp().value() - damage);
-
-		eventLog_.log(getCurrentTick_(), sw::io::UnitAttacked{unitPtr->getId(), targetUnitPtr->getId(), damage, targetUnitPtr->getHp().value()});
-		if (targetUnitPtr->getHp() == 0)
-		{
-			eventLog_.log(getCurrentTick_(), sw::io::UnitDied{targetUnitPtr->getId()});
-		}
-	}
-
-	const std::optional<Action> MapUnitsController::decideMoveActionForUnit(const std::shared_ptr<MovingUnit>& unit)
-	{
-		// no target defined
-		if (!unit->getTarget().has_value())
-		{
-			return std::nullopt;
-		}
-		// already at target
-		if (unit->getTarget().value() == unit->getPosition())
-		{
-			return std::nullopt;
-		}
-		// construct MoveAction using shared_ptr so Action will keep a weak_ptr
-		std::vector<Coordinate> moveRange = getCoordinatesInRange(unit->getPosition(), unit->getSpeed(), unit->getSpeed());
-		std::vector<std::pair<Coordinate, float>> moveOptions{};
-		moveOptions.reserve(moveRange.size());
-		for (Coordinate& coord : moveRange)
-		{
-			if (unit->isSolid() && isOccupied(coord)) // skip colliding units
-			{
-				continue;
-			}
-			if (coord.isCloserThanThat(unit->getPosition(), unit->getTarget().value()))
-			{
-				moveOptions.emplace_back(coord, unit->getTarget().value().euclideanDistance(coord));
-			}
-		}
-		if (moveOptions.size() == 0)
-		{
-			// no valid move options
-			return std::nullopt;
-		}
-		// sort moveOptions by the 2nd element (distance to target)
-		std::sort(moveOptions.begin(), moveOptions.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
-		// find all options with
-		Coordinate targetCoord = moveOptions[0].first;
-		MoveAction action(unit, targetCoord);
-		return action;
-	}
+	//
+	// const void MapUnitsController::executeMoveAction(const Action& action)
+	// {
+	// 	auto unitPtr = action.unitFrom.lock();
+	// 	if (!unitPtr)
+	// 	{
+	// 		throw std::runtime_error("MoveAction is missing unitFrom");
+	// 	}
+	// 	// cast to MovingUnit
+	// 	auto movingUnitPtr = std::dynamic_pointer_cast<MovingUnit>(unitPtr);
+	// 	if (!movingUnitPtr)
+	// 	{
+	// 		throw std::runtime_error("MoveAction can not be applied to non MovingUnit");
+	// 	}
+	// 	if (!action.coordinateTo.has_value())
+	// 	{
+	// 		throw std::runtime_error("MoveAction missing coordinateTo");
+	// 	}
+	// 	// perform move
+	// 	auto newPos = action.coordinateTo.value();
+	// 	unitPtr->setPosition(newPos);
+	// 	// emit UnitMoved event using injected EventLog and current tick callback
+	// 	eventLog_.log(getCurrentTick_(), sw::io::UnitMoved{unitPtr->getId(), static_cast<uint32_t>(newPos.getX()), static_cast<uint32_t>(newPos.getY())});
+	// 	if (movingUnitPtr->getTarget() == newPos)
+	// 	{
+	// 		eventLog_.log(getCurrentTick_(), sw::io::MarchEnded(unitPtr->getId(), static_cast<uint32_t>(newPos.getX()), static_cast<uint32_t>(newPos.getY())));
+	// 		// reached target
+	// 		movingUnitPtr->clearTarget();
+	// 	}
+	// }
+	//
+	// const void MapUnitsController::executeAttackAction(const Action& action)
+	// {
+	// 	auto unitPtr = action.unitFrom.lock();
+	// 	if (!unitPtr)
+	// 	{
+	// 		throw std::runtime_error("MeleeAttackAction is missing unitFrom");
+	// 	}
+	// 	if (action.unitsTo.empty())
+	// 	{
+	// 		throw std::runtime_error("MeleeAttackAction is missing unitsTo");
+	// 	}
+	// 	auto targetUnitPtr = action.unitsTo[0].lock();
+	// 	if (!targetUnitPtr)
+	// 	{
+	// 		throw std::runtime_error("MeleeAttackAction target unit is expired");
+	// 	}
+	// 	if (!targetUnitPtr->hasHp())
+	// 	{
+	// 		throw std::runtime_error("MeleeAttackAction target unit can not take damage or is dead");
+	// 	}
+	// 	// perform attack
+	// 	uint32_t damage = unitPtr->getDamageForActionType(action.actionType);
+	// 	targetUnitPtr->setHp(targetUnitPtr->getHp().value() - damage);
+	//
+	// 	eventLog_.log(getCurrentTick_(), sw::io::UnitAttacked{unitPtr->getId(), targetUnitPtr->getId(), damage, targetUnitPtr->getHp().value()});
+	// 	if (targetUnitPtr->getHp() == 0)
+	// 	{
+	// 		eventLog_.log(getCurrentTick_(), sw::io::UnitDied{targetUnitPtr->getId()});
+	// 	}
+	// }
 }

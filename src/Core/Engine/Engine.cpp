@@ -4,6 +4,8 @@
 
 #include "Engine.hpp"
 
+#include "IO/Commands/SpawnHealer.hpp"
+
 #include <IO/Events/MapCreated.hpp>
 #include <cassert>
 #include <chrono>
@@ -42,14 +44,13 @@ namespace sw::core
 			getMapUnitsController()->removeDeadUnits();
 	    	if (getMapUnitsController()->getUnitsCount()==1 || getMapUnitsController()->doTurn() == 0)
 		    {
-			    debugPrint("No actions performed in this round, ending simulation.");
+			    // debugPrint("No actions performed in this round, ending simulation.");
 			    break;
 		    }
 
 	    	// getMapUnitsController()->printMap();
-		    // debugPrint(std::string("Starting round ") + std::to_string(round));
 
-		    // avoid busy spin; sleep a short amount
+		    // sleep a short amount
 		    std::this_thread::sleep_for(std::chrono::milliseconds(500));
 	    }
     }
@@ -68,6 +69,16 @@ namespace sw::core
     {
         handleSpawn(cmd, std::string("Hunter"));
     }
+
+	void Engine::handleCommand(const sw::io::SpawnMine& cmd)
+	{
+		handleSpawn(cmd, std::string("Mine"));
+	}
+
+	void Engine::handleCommand(const sw::io::SpawnHealer& cmd)
+	{
+		handleSpawn(cmd, std::string("Healer"));
+	}
 
     void Engine::handleCommand(const sw::io::March& cmd /*cmd*/)
     {
