@@ -11,6 +11,8 @@
 
 namespace sw::core
 {
+	std::unique_ptr<Engine> Engine::instance = nullptr;
+
 	MapUnitsController* Engine::getMapUnitsController()
 	{
 		assert(battleMap && "Engine::getMapUnitsController: map not created");
@@ -44,11 +46,11 @@ namespace sw::core
 			    break;
 		    }
 
-	    	getMapUnitsController()->printMap();
+	    	// getMapUnitsController()->printMap();
 		    // debugPrint(std::string("Starting round ") + std::to_string(round));
 
 		    // avoid busy spin; sleep a short amount
-		    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+		    std::this_thread::sleep_for(std::chrono::milliseconds(500));
 	    }
     }
 

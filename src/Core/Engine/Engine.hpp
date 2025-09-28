@@ -23,16 +23,18 @@ namespace sw::core
 	// Singleton Engine class that processes commands and manages game state
     class Engine
     {
-    	static Engine* instance;
+    	static std::unique_ptr<Engine> instance;
     public:
     	static Engine* getInstance()
     	{
-			if (instance == nullptr)
+    		if (!instance)
 			{
-				instance = new Engine();
+				instance.reset(new Engine());
 			}
-			return instance;
+    		return instance.get();
     	}
+
+    	~Engine() = default;
 
         // Command handlers
         void handleCommand(const sw::io::CreateMap& cmd);
@@ -59,8 +61,6 @@ namespace sw::core
             getMapUnitsController()->placeUnit(std::move(unit));
 
             eventLog.log(round, sw::io::UnitSpawned{cmd.unitId, unitType, cmd.x, cmd.y});
-
-            debugPrint(std::string("Spawned ") + unitType + " id=" + std::to_string(cmd.unitId) + " at (" + std::to_string(cmd.x) + "," + std::to_string(cmd.y) + ")");
         }
     };
 }
