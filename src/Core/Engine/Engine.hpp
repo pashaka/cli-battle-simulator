@@ -56,7 +56,7 @@ namespace sw::core
         void debugPrint(const std::string& msg) const { std::cout << msg << std::endl; }
     	void createMap(uint32_t width, uint32_t height);
 
-		sw::EventLog eventLog; // log/emitter for produced events
+		EventLog eventLog; // log/emitter for produced events
 
         template <typename TCommand>
         void handleSpawn(const TCommand& cmd, const std::string& unitType)

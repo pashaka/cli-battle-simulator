@@ -1,0 +1,51 @@
+digraph sw_core {
+  rankdir=LR;
+  node [shape=record, fontsize=10, fontname="Helvetica"];
+
+  Unit [label="Unit|+id\l+hp\l+name\l+position\l+availableActionsNum\l+solid\l|+getId()\l+getHp()\l+increaseHp()\l+getActionTypesOrder() (virtual)", shape=record];
+
+  MovingUnit [label="MovingUnit\n(virtual)\n|+targetPosition\l+speed\l|+tryToExecuteMove()", shape=record];
+  MeleeAttackingUnit [label="MeleeAttackingUnit\n(virtual)\n|+strength\l|+tryToExecuteMeleeAttack()", shape=record];
+  RangedAttackingUnit [label="RangedAttackingUnit\n(virtual)\n|+agility\l+range_min\l+range_max\l|+tryToExecuteRangedAttack()\l+disallowRangedIfAdjacent()", shape=record];
+  TriggeredUnit [label="TriggeredUnit\n(virtual)\n|+triggered\l+triggerRange\l|+tryToExecuteTrigger()", shape=record];
+  ExplodingUnit [label="ExplodingUnit\n(virtual)\n|+power\l+explosionRange\l|+tryToExecuteExplode()\l+shouldExplodeNow()", shape=record];
+  HealingUnit [label="HealingUnit\n(virtual)\n|+spirit\l+healingRange\l|+tryToExecuteHeal()", shape=record];
+
+  SwordsmanUnit [label="SwordsmanUnit|MovingUnit + MeleeAttackingUnit|getActionTypesOrder() -> {MeleeAttack, Move}"];
+  HunterUnit [label="HunterUnit|MovingUnit + MeleeAttackingUnit + RangedAttackingUnit|getActionTypesOrder() -> {RangedAttack, MeleeAttack, Move}\ndisallowRangedIfAdjacent() -> true"];
+  TowerUnit [label="TowerUnit|Unit|getActionTypesOrder() -> {RangedAttack}"];
+  HealerUnit [label="HealerUnit|MovingUnit + HealingUnit|getActionTypesOrder() -> {Heal, Move}"];
+  MineUnit [label="MineUnit|ExplodingUnit + TriggeredUnit|getActionTypesOrder() -> {Explode, Trigger}"];
+
+  // inheritance edges (virtual inheritance shown by label)
+  MovingUnit -> Unit [arrowhead=empty label="virtual" fontsize=9];
+  MeleeAttackingUnit -> Unit [arrowhead=empty label="virtual" fontsize=9];
+  RangedAttackingUnit -> Unit [arrowhead=empty label="virtual" fontsize=9];
+  TriggeredUnit -> Unit [arrowhead=empty label="virtual" fontsize=9];
+  ExplodingUnit -> Unit [arrowhead=empty label="virtual" fontsize=9];
+  HealingUnit -> Unit [arrowhead=empty label="virtual" fontsize=9];
+
+  // concrete compositions
+  SwordsmanUnit -> MovingUnit [arrowhead=onormal];
+  SwordsmanUnit -> MeleeAttackingUnit [arrowhead=onormal];
+
+  HunterUnit -> MovingUnit [arrowhead=onormal];
+  HunterUnit -> MeleeAttackingUnit [arrowhead=onormal];
+  HunterUnit -> RangedAttackingUnit [arrowhead=onormal];
+
+  TowerUnit -> Unit [arrowhead=onormal];
+
+  HealerUnit -> MovingUnit [arrowhead=onormal];
+  HealerUnit -> HealingUnit [arrowhead=onormal];
+
+  MineUnit -> ExplodingUnit [arrowhead=onormal];
+  MineUnit -> TriggeredUnit [arrowhead=onormal];
+
+  // engine/controller related
+  MapUnitsController [label="MapUnitsController|+width\l+height\l+units\l+eventLog_\l|getUnitsInRange()\l+doTurn()\l+getCurrentTick()", shape=record];
+  ActionTypeBase [label="ActionTypeBase|+tryToExecute(unit, worldState)", shape=record];
+
+  MapUnitsController -> Unit [style=dotted label="owns" fontsize=9];
+  ActionTypeBase -> Unit [style=dotted label="action dispatch" fontsize=9];
+}
+
